@@ -1,15 +1,16 @@
 'use client';
 
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import {
   companyOptions,
-  encodeAnswer,
   formatDate,
   locations,
   venues,
   type ActivityType,
   type InviteAnswer,
 } from './invite-data';
+
+const RSVP_API_URL = process.env.NEXT_PUBLIC_RSVP_API_URL ?? '/api/rsvp';
 
 const fixedDates = [
   { value: '2026-08-29', weekday: 'суббота', dateLabel: '29 августа' },
@@ -20,7 +21,6 @@ const hours = Array.from({ length: 8 }, (_, index) => String(index + 16).padStar
 const minutes = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0'));
 
 export default function Home() {
-  const customDateInputRef = useRef<HTMLInputElement>(null);
   const [activity, setActivity] = useState<ActivityType | ''>('');
   const [locationId, setLocationId] = useState('');
   const [customLocation, setCustomLocation] = useState('');
@@ -30,6 +30,7 @@ export default function Home() {
   const [minute, setMinute] = useState('00');
   const [company, setCompany] = useState('');
   const [note, setNote] = useState('');
+  const [submissionState, setSubmissionState] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
 
   const selectedLocation = useMemo(() => {
     if (locationId === 'custom' && customLocation.trim()) {
@@ -67,24 +68,7 @@ export default function Home() {
     }
   }
 
-  function openCustomDatePicker() {
-    const input = customDateInputRef.current;
-    if (!input) return;
-
-    if (typeof input.showPicker === 'function') {
-      try {
-        input.showPicker();
-        return;
-      } catch {
-        // Some mobile browsers expose showPicker but only allow the click fallback.
-      }
-    }
-
-    input.focus({ preventScroll: true });
-    input.click();
-  }
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit || !activity || !selectedPlace) return;
 
@@ -99,10 +83,19 @@ export default function Home() {
       company: activity === 'outdoor' ? selectedCompany?.label ?? '' : '',
       note: note.trim(),
     };
-    const resultUrl = new URL('otvet/', window.location.href);
-    resultUrl.searchParams.set('d', encodeAnswer(answer));
-    localStorage.setItem('invite-last-answer', resultUrl.toString());
-    window.location.href = resultUrl.toString();
+
+    setSubmissionState('sending');
+    try {
+      const response = await fetch(RSVP_API_URL, {
+        method: 'POST',
+        headers: { 'content-type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify(answer),
+      });
+      if (!response.ok) throw new Error('RSVP request failed');
+      setSubmissionState('success');
+    } catch {
+      setSubmissionState('error');
+    }
   }
 
   return (
@@ -333,21 +326,19 @@ export default function Home() {
                         <strong>{option.dateLabel}</strong>
                       </button>
                     ))}
-                    <div className={`native-date-button ${isCustomDate ? 'is-selected' : ''}`}>
-                      <button type="button" onClick={openCustomDatePicker} aria-label="Выбрать другую дату">
+                    <label className={`native-date-button ${isCustomDate ? 'is-selected' : ''}`}>
+                      <span className="native-date-copy" aria-hidden="true">
                         <span>{isCustomDate ? formatDate(date) : 'другая'}</span>
                         <strong>{isCustomDate ? 'выбрана' : 'дата'}</strong>
-                      </button>
+                      </span>
                       <input
-                        ref={customDateInputRef}
                         type="date"
                         min="2026-08-29"
                         value={isCustomDate ? date : ''}
                         onChange={(event) => setDate(event.target.value)}
                         aria-label="Выбрать другую дату"
-                        tabIndex={-1}
                       />
-                    </div>
+                    </label>
                   </div>
                 </div>
 
@@ -426,12 +417,33 @@ export default function Home() {
                 </div>
               )}
             </dl>
-            <button className="submit-button" type="submit" disabled={!canSubmit}>
-              Такой план подходит <span aria-hidden="true">→</span>
+            {submissionState === 'success' && (
+              <div className="submission-message submission-message-success" role="status">
+                <strong>Ответ отправлен.</strong>
+                <span>Автор приглашения увидит выбранный план автоматически.</span>
+              </div>
+            )}
+            {submissionState === 'error' && (
+              <div className="submission-message submission-message-error" role="alert">
+                <strong>Не получилось отправить ответ.</strong>
+                <span>Проверьте интернет и попробуйте ещё раз.</span>
+              </div>
+            )}
+            <button
+              className="submit-button"
+              type="submit"
+              disabled={!canSubmit || submissionState === 'sending' || submissionState === 'success'}
+            >
+              {submissionState === 'sending'
+                ? 'Отправляю ответ…'
+                : submissionState === 'success'
+                  ? 'Ответ отправлен'
+                  : 'Такой план подходит'}
+              <span aria-hidden="true">→</span>
             </button>
             <p className="privacy-note">
-              После подтверждения появится ссылка с выбранным планом — её можно
-              отправить автору приглашения.
+              После подтверждения выбранный план отправится автору приглашения
+              автоматически. Пересылать ссылку вручную не нужно.
             </p>
           </aside>
         </form>
