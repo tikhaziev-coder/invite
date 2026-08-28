@@ -28,6 +28,7 @@ jobs:
         env:
           GITHUB_PAGES: 'true'
           NEXT_PUBLIC_SITE_URL: https://tikhaziev-coder.github.io/invite
+          NEXT_PUBLIC_RSVP_API_URL: https://invite-albina-ufa.makapon.chatgpt.site/api/rsvp
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
