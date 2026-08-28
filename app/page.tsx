@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 import {
   companyOptions,
   encodeAnswer,
@@ -20,6 +20,7 @@ const hours = Array.from({ length: 8 }, (_, index) => String(index + 16).padStar
 const minutes = Array.from({ length: 12 }, (_, index) => String(index * 5).padStart(2, '0'));
 
 export default function Home() {
+  const customDateInputRef = useRef<HTMLInputElement>(null);
   const [activity, setActivity] = useState<ActivityType | ''>('');
   const [locationId, setLocationId] = useState('');
   const [customLocation, setCustomLocation] = useState('');
@@ -66,6 +67,23 @@ export default function Home() {
     }
   }
 
+  function openCustomDatePicker() {
+    const input = customDateInputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Some mobile browsers expose showPicker but only allow the click fallback.
+      }
+    }
+
+    input.focus({ preventScroll: true });
+    input.click();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSubmit || !activity || !selectedPlace) return;
@@ -98,7 +116,7 @@ export default function Home() {
         <div className="hero-copy">
           <p className="eyebrow">Для спокойного вечера без спешки</p>
           <h1 id="invite-title">
-            Альбина Рамилевна,
+            Альбина Шамилевна,
             <br />
             приглашаю вас <em>провести время вместе</em>
           </h1>
@@ -315,17 +333,21 @@ export default function Home() {
                         <strong>{option.dateLabel}</strong>
                       </button>
                     ))}
-                    <label className={`native-date-button ${isCustomDate ? 'is-selected' : ''}`}>
-                      <span>{isCustomDate ? formatDate(date) : 'другая'}</span>
-                      <strong>{isCustomDate ? 'выбрана' : 'дата'}</strong>
+                    <div className={`native-date-button ${isCustomDate ? 'is-selected' : ''}`}>
+                      <button type="button" onClick={openCustomDatePicker} aria-label="Выбрать другую дату">
+                        <span>{isCustomDate ? formatDate(date) : 'другая'}</span>
+                        <strong>{isCustomDate ? 'выбрана' : 'дата'}</strong>
+                      </button>
                       <input
+                        ref={customDateInputRef}
                         type="date"
                         min="2026-08-29"
                         value={isCustomDate ? date : ''}
                         onChange={(event) => setDate(event.target.value)}
                         aria-label="Выбрать другую дату"
+                        tabIndex={-1}
                       />
-                    </label>
+                    </div>
                   </div>
                 </div>
 
