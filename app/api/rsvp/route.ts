@@ -50,7 +50,7 @@ async function ensureSchema(database: D1Database) {
 function corsHeaders(request: Request) {
   const origin = request.headers.get('origin');
   const headers = new Headers({
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'content-type',
     'Cache-Control': 'no-store',
     Vary: 'Origin',
@@ -215,5 +215,33 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Failed to read RSVP', error);
     return json(request, { error: 'Не удалось загрузить ответ' }, 500);
+  }
+}
+
+export async function DELETE(request: Request) {
+  const requestUrl = new URL(request.url);
+  const candidateKey = requestUrl.searchParams.get('key') ?? '';
+  const responseId = requestUrl.searchParams.get('id') ?? '';
+  const runtimeBindings = getRuntimeBindings();
+  const adminKey = runtimeBindings.ADMIN_VIEW_KEY ?? process.env.ADMIN_VIEW_KEY ?? '';
+
+  if (!adminKey) return json(request, { error: 'Страница владельца ещё не настроена' }, 503);
+  if (!keyMatches(candidateKey, adminKey)) return json(request, { error: 'Доступ запрещён' }, 403);
+  if (!/^[0-9a-f-]{36}$/i.test(responseId)) {
+    return json(request, { error: 'Не указан ответ для удаления' }, 400);
+  }
+
+  try {
+    const database = getDatabase();
+    await ensureSchema(database);
+    const result = await database
+      .prepare('DELETE FROM invite_responses WHERE invitation_id = ? AND id = ?')
+      .bind(INVITATION_ID, responseId)
+      .run();
+
+    return json(request, { ok: true, deleted: result.meta.changes });
+  } catch (error) {
+    console.error('Failed to delete RSVP', error);
+    return json(request, { error: 'Не удалось удалить ответ' }, 500);
   }
 }
